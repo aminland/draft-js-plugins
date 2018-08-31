@@ -15,6 +15,22 @@ const getRelativeParent = (element) => {
   return getRelativeParent(element.parentElement);
 };
 
+
+const getContainerElement = (element) => {
+  if (!element) {
+    return document.documentElement;
+  }
+
+  const overflowX = window.getComputedStyle(element).getPropertyValue('overflow-x');
+  const overflowY = window.getComputedStyle(element).getPropertyValue('overflow-y');
+  if (overflowX === 'hidden' || overflowY === 'hidden') {
+    return element;
+  }
+
+  return getContainerElement(element.parentElement);
+};
+
+
 const getMargin = (element, side = 'left') => {
   const elementStyles = window.getComputedStyle
     ? getComputedStyle(element, null)
@@ -86,16 +102,19 @@ export default class Toolbar extends React.Component {
       if (!selectionRect) return;
       const relativeParent = getRelativeParent(this.toolbar.parentElement);
       const relativeRect = (relativeParent || document.body).getBoundingClientRect();
-      const windowWidth = document.documentElement.clientWidth;
+
+      const containerEl = relativeParent ? getContainerElement(relativeParent) : document.body;
+      const containerRect = (containerEl || document.body).getBoundingClientRect();
+
       // we should take into account a case when we don't have relative parent,
       // but our body has a margin
       const bodyMargin = relativeParent ? 0 : getMargin(document.body);
 
       const toolbarHalfWidth = this.toolbar.offsetWidth / 2;
       // calculating the middle of the text selection
-      const fromBeginningToMiddle = (selectionRect.left + (selectionRect.width / 2));
+      const fromBeginningToMiddle = (selectionRect.left + (selectionRect.width / 2)) - containerRect.left;
       // the same but against editor right side
-      const beforeWindowEnd = windowWidth - fromBeginningToMiddle;
+      const beforeWindowEnd = containerRect.right - (selectionRect.left + (selectionRect.width / 2));
 
       const leftToolbarMargin = getMargin(this.toolbar);
       const rightToolbarMargin = getMargin(this.toolbar, 'right');
@@ -111,9 +130,7 @@ export default class Toolbar extends React.Component {
       // +-----------------------------------------------+
       if (fromBeginningToMiddle < (toolbarHalfWidth + (2 * leftToolbarMargin))) {
         // shift computations are different for relative editor and body
-        const leftShift = relativeParent
-          ? relativeRect.left
-          : 0;
+        const leftShift = relativeRect.left - containerRect.left;
         horizontalOffset = (toolbarHalfWidth - leftShift) + leftToolbarMargin;
         alignment = 'left';
       } else if (beforeWindowEnd < (toolbarHalfWidth + (2 * rightToolbarMargin))) {
@@ -128,9 +145,7 @@ export default class Toolbar extends React.Component {
         // |                                               |
         // +-----------------------------------------------+
         // shift computations are different for relative editor and body
-        const rightShift = relativeParent
-          ? windowWidth - relativeRect.right
-          : 0;
+        const rightShift = containerRect.right - relativeRect.right;
         horizontalOffset = (-toolbarHalfWidth - rightShift) + rightToolbarMargin;
         alignment = 'right';
       } else {
@@ -154,7 +169,7 @@ export default class Toolbar extends React.Component {
           alignment,
           selectionRect,
           fromBeginningToMiddle,
-          windowWidth
+          containerRect
         )
       });
     });
@@ -189,11 +204,11 @@ export default class Toolbar extends React.Component {
    * @param alignment
    * @param selectionRect
    * @param fromBeginningToMiddle
-   * @param windowWidth
+   * @param containerRect
    * @returns {string|number}
    */
   calculatePointerPosition = (
-    alignment, selectionRect, fromBeginningToMiddle, windowWidth
+    alignment, selectionRect, fromBeginningToMiddle, containerRect
   ) => {
     if (typeof alignment === 'string') {
       if (alignment === 'left') {
@@ -201,7 +216,7 @@ export default class Toolbar extends React.Component {
       }
 
       return `{ left: ${this.toolbar.offsetWidth -
-      (windowWidth - (selectionRect.right - (selectionRect.width / 2)) -
+      (containerRect.right - (selectionRect.right - (selectionRect.width / 2)) -
         (2 * getMargin(this.toolbar, 'right')))}px; }`;
     }
 
